@@ -6,7 +6,7 @@ import scipy.misc
 from io import BytesIO, StringIO
 
 import matplotlib.pyplot as plt
-from scipy.interpolate import spline, interp1d
+from scipy.interpolate import interp1d
 
 from core.util import time_seq
 plt.rcParams.update({'font.size': 13})

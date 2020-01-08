@@ -123,12 +123,12 @@ if __name__ == '__main__':
     config.env = args.env
     config.gamma = 0.99
     config.epsilon = 1
-    config.epsilon_min = 0.01
+    config.epsilon_min = 0.02
     config.eps_decay = 30000
-    config.frames = 2000000
+    config.frames = 5000000
     config.use_cuda = True
     config.learning_rate = 1e-4
-    config.max_buff = 100000
+    config.max_buff = 50000
     config.update_tar_interval = 1000
     config.batch_size = 32
     config.print_interval = 5000
@@ -137,6 +137,13 @@ if __name__ == '__main__':
     config.checkpoint_interval = 500000
     config.win_reward = 18  # PongNoFrameskip-v4
     config.win_break = True
+
+    if args.env == 'PongNoFrameskip-v4':
+        config.win_reward = 17
+    elif args.env == 'BreakoutNoFrameskip-v4':
+        config.win_reward = 200
+    elif args.env == 'BoxingNoFrameskip-v4':
+        config.win_reward = 200
 
     # handle the atari env
     env = make_atari(config.env)

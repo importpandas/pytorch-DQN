@@ -31,10 +31,12 @@ class Trainer:
 
         state = self.env.reset()
         for fr in range(pre_fr + 1, self.config.frames + 1):
+            #self.env.render()
             epsilon = self.epsilon_by_frame(fr)
             action = self.agent.act(state, epsilon)
 
             next_state, reward, done, _ = self.env.step(action)
+            #print(f'step reward {reward}')
             self.agent.buffer.add(state, action, reward, next_state, done)
 
             state = next_state
@@ -47,10 +49,7 @@ class Trainer:
                 self.board_logger.scalar_summary('Loss per frame', fr, loss)
 
             if fr % self.config.print_interval == 0:
-                print("frames: %5d, reward: %5f, loss: %4f episode: %4d" % (fr, np.mean(all_rewards[-10:]), loss, ep_num))
-
-            if fr % self.config.log_interval == 0:
-                self.board_logger.scalar_summary('Reward per episode', ep_num, all_rewards[-1])
+                print("frames: %5d, reward: %5f, loss: %4f episode: %4d" % (fr, np.mean(all_rewards[-10:]), loss, ep_num), flush=True)
 
             if self.config.checkpoint and fr % self.config.checkpoint_interval == 0:
                 self.agent.save_checkpoint(fr, self.outputdir)
@@ -58,9 +57,11 @@ class Trainer:
             if done:
                 state = self.env.reset()
                 all_rewards.append(episode_reward)
+                #print(f'episode reward {episode_reward}')
                 episode_reward = 0
                 ep_num += 1
                 avg_reward = float(np.mean(all_rewards[-100:]))
+                self.board_logger.scalar_summary('Reward per episode', ep_num, all_rewards[-1])
                 self.board_logger.scalar_summary('Best 100-episodes average reward', ep_num, avg_reward)
 
                 if len(all_rewards) >= 100 and avg_reward >= self.config.win_reward and all_rewards[-1] > self.config.win_reward:
