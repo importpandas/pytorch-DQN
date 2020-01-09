@@ -3,13 +3,14 @@ class Config:
     env: str = None
     gamma: float = None
     learning_rate: float = None
+    learning_starts: int = None
     frames: int = None
     episodes: int = None
     max_buff: int = None
     batch_size: int = None
 
     epsilon: float = None
-    eps_decay: float = None
+    eps_fraction: float = None
     epsilon_min: float = None
 
     state_dim: int = None

@@ -11,12 +11,12 @@ class Trainer:
         self.env = env
         self.config = config
 
-        # non-Linear epsilon decay
+        # Linear epsilon decay
         epsilon_final = self.config.epsilon_min
         epsilon_start = self.config.epsilon
-        epsilon_decay = self.config.eps_decay
-        self.epsilon_by_frame = lambda frame_idx: epsilon_final + (epsilon_start - epsilon_final) * math.exp(
-            -1. * frame_idx / epsilon_decay)
+        eps_steps = self.config.eps_fraction * float(self.config.frames)
+        self.epsilon_by_frame = lambda frame_idx: epsilon_start + (min(1.0, float(frame_idx) / eps_steps)) \
+                                                  * (epsilon_final - epsilon_start)
 
         self.outputdir = get_output_folder(self.config.output, self.config.env)
         self.agent.save_config(self.outputdir)
@@ -31,8 +31,9 @@ class Trainer:
 
         state = self.env.reset()
         for fr in range(pre_fr + 1, self.config.frames + 1):
-            #self.env.render()
+            self.env.render()
             epsilon = self.epsilon_by_frame(fr)
+            print(epsilon)
             action = self.agent.act(state, epsilon)
 
             next_state, reward, done, _ = self.env.step(action)
@@ -43,7 +44,7 @@ class Trainer:
             episode_reward += reward
 
             loss = 0
-            if self.agent.buffer.size() > self.config.batch_size:
+            if self.agent.buffer.size() > self.config.batch_size and fr >= self.config.learning_starts:
                 loss = self.agent.learning(fr)
                 losses.append(loss)
                 self.board_logger.scalar_summary('Loss per frame', fr, loss)
