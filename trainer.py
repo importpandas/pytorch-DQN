@@ -31,14 +31,13 @@ class Trainer:
 
         state = self.env.reset()
         for fr in range(pre_fr + 1, self.config.frames + 1):
-            self.env.render()
+            #self.env.render()
             epsilon = self.epsilon_by_frame(fr)
-            print(epsilon)
             action = self.agent.act(state, epsilon)
 
             next_state, reward, done, _ = self.env.step(action)
             #print(f'step reward {reward}')
-            self.agent.buffer.add(state, action, reward, next_state, done)
+            self.agent.buffer.add(state, action, reward, next_state, float(done))
 
             state = next_state
             episode_reward += reward

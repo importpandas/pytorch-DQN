@@ -6,3 +6,4 @@ out/
 log/
 shell/
 submit_single.sh
+hpc_out/

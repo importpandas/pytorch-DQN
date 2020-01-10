@@ -4,18 +4,30 @@ import random
 import torch
 from torch.optim import Adam
 from tester import Tester
-from buffer import ReplayBuffer
+from buffer import ReplayBuffer, PrioritizedReplayBuffer
 from common.wrappers import make_atari, wrap_deepmind, wrap_pytorch
+from common.schedule import LinearSchedule
 from config import Config
 from core.util import get_class_attr_val
 from model import CnnDQN
 from trainer import Trainer
+import torch.nn.functional as F
+import numpy as np
 
 class CnnDDQNAgent:
     def __init__(self, config: Config):
         self.config = config
         self.is_training = True
-        self.buffer = ReplayBuffer(self.config.max_buff)
+        if self.config.prioritized_replay:
+            self.buffer = PrioritizedReplayBuffer(self.config.max_buff, alpha=self.config.prioritized_replay_alpha)
+            if self.config.prioritized_replay_beta_iters is None:
+                prioritized_replay_beta_iters = self.config.frames
+            self.beta_schedule = LinearSchedule(prioritized_replay_beta_iters,
+                                           initial_p=self.config.prioritized_replay_beta0,
+                                           final_p=1.0)
+        else:
+            self.buffer = ReplayBuffer(self.config.max_buff)
+            self.beta_schedule = None
 
         self.model = CnnDQN(self.config.state_shape, self.config.action_dim)
         self.target_model = CnnDQN(self.config.state_shape, self.config.action_dim)
@@ -38,13 +50,20 @@ class CnnDDQNAgent:
         return action
 
     def learning(self, fr):
-        s0, a, r, s1, done = self.buffer.sample(self.config.batch_size)
+
+        if self.config.prioritized_replay:
+            experience = self.buffer.sample(self.config.batch_size, beta=self.beta_schedule.value(fr))
+            (s0, a, r, s1, done, weights, batch_idxes) = experience
+        else:
+            s0, a, r, s1, done = self.buffer.sample(self.config.batch_size)
+            weights, batch_idxes = np.ones_like(r), None
 
         s0 = torch.tensor(s0, dtype=torch.float)
         s1 = torch.tensor(s1, dtype=torch.float)
         a = torch.tensor(a, dtype=torch.long)
         r = torch.tensor(r, dtype=torch.float)
         done = torch.tensor(done, dtype=torch.float)
+        weights = torch.tensor(weights, dtype=torch.float)
 
         if self.config.use_cuda:
             s0 = s0.cuda()
@@ -52,6 +71,7 @@ class CnnDDQNAgent:
             a = a.cuda()
             r = r.cuda()
             done = done.cuda()
+            weights = weights.cuda()
 
         q_values = self.model(s0).cuda()
         next_q_values = self.model(s1).cuda()
@@ -60,12 +80,18 @@ class CnnDDQNAgent:
         q_value = q_values.gather(1, a.unsqueeze(1)).squeeze(1)
         next_q_value = next_q_state_values.gather(1, next_q_values.max(1)[1].unsqueeze(1)).squeeze(1)
         expected_q_value = r + self.config.gamma * next_q_value * (1 - done)
+        td_errors = next_q_value - expected_q_value
         # Notice that detach the expected_q_value
-        loss = (q_value - expected_q_value.detach()).pow(2).mean()
+        loss = F.smooth_l1_loss(q_value, expected_q_value.detach(), reduction='none')
+        loss = (loss * weights).mean()
 
         self.model_optim.zero_grad()
         loss.backward()
         self.model_optim.step()
+
+        if self.config.prioritized_replay:
+            new_priorities = np.abs(td_errors.detach().cpu().numpy()) + self.config.prioritized_replay_eps
+            self.buffer.update_priorities(batch_idxes, new_priorities)
 
         if fr % self.config.update_tar_interval == 0:
             self.target_model.load_state_dict(self.model.state_dict())
@@ -116,6 +142,7 @@ if __name__ == '__main__':
     parser.add_argument('--test', dest='test', action='store_true', help='test model')
     parser.add_argument('--retrain', dest='retrain', action='store_true', help='retrain model')
     parser.add_argument('--model_path', type=str, help='if test or retrain, import the model')
+    parser.add_argument('--prioritized_replay', action='store_true', help='whether to use prioritized replay')
     args = parser.parse_args()
     # atari_ddqn.py --train --env PongNoFrameskip-v4
 
@@ -125,7 +152,7 @@ if __name__ == '__main__':
     config.epsilon = 1
     config.epsilon_min = 0.01
     config.eps_fraction = 0.1
-    config.frames = 5000000
+    config.frames = 2000000
     config.use_cuda = True
     config.learning_rate = 1e-4
     config.max_buff = 10000
@@ -138,6 +165,10 @@ if __name__ == '__main__':
     config.checkpoint_interval = 500000
     config.win_reward = 18  # PongNoFrameskip-v4
     config.win_break = True
+    config.prioritized_replay = args.prioritized_replay
+    prioritized_replay_alpha = 0.6
+    prioritized_replay_beta0 = 0.4
+    prioritized_replay_eps = 1e-6
 
     if args.env == 'PongNoFrameskip-v4':
         config.win_reward = 17

@@ -6,7 +6,14 @@ class Config:
     learning_starts: int = None
     frames: int = None
     episodes: int = None
+
     max_buff: int = None
+    prioritized_replay: bool = False
+    prioritized_replay_alpha: float = 0.6
+    prioritized_replay_beta0: float = 0.4
+    prioritized_replay_beta_iters: int = None
+    prioritized_replay_eps: float = 1e-6
+
     batch_size: int = None
 
     epsilon: float = None
